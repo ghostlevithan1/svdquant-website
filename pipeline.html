@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>svdquant — Pipeline</title>
+<meta name="description" content="How svdquant compresses a transformer and runs it: calibration, allocation, factorization, quantization, storage and decoding.">
+<style>
+:root{
+  --bg:#f7f8fb; --surface:#ffffff; --ink:#15181f; --muted:#5b6474; --line:#e2e6ee;
+  --accent:#2f6fed; --accent-ink:#ffffff; --good:#1c8a5a; --warn:#b26a00;
+  --code-bg:#eef1f7; --shadow:0 1px 2px rgba(20,25,40,.06),0 4px 16px rgba(20,25,40,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1116; --surface:#161b23; --ink:#e7ebf2; --muted:#9aa4b5; --line:#262e3a;
+    --accent:#6b9bff; --accent-ink:#0e1116; --good:#4cc38a; --warn:#e8a93a;
+    --code-bg:#1d2430; --shadow:none;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1116; --surface:#161b23; --ink:#e7ebf2; --muted:#9aa4b5; --line:#262e3a;
+  --accent:#6b9bff; --accent-ink:#0e1116; --good:#4cc38a; --warn:#e8a93a;
+  --code-bg:#1d2430; --shadow:none;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--accent)}
+.wrap{max-width:900px;margin:0 auto;padding:0 16px}
+header.top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;justify-content:space-between;height:56px}
+.brand{font-weight:700;color:var(--ink);text-decoration:none}
+nav a{color:var(--muted);text-decoration:none;margin-left:16px;font-size:14px}
+nav a:hover{color:var(--ink)}
+.toggle{background:none;border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:4px 10px;font-size:13px;cursor:pointer;margin-left:16px}
+header.hero{padding:48px 0 24px}
+.eyebrow{text-transform:uppercase;font-size:12px;letter-spacing:1.2px;color:var(--accent);font-weight:700;margin-bottom:10px}
+h1{font-size:clamp(28px,4.5vw,42px);line-height:1.15;margin:0 0 12px;letter-spacing:-.4px}
+h2{font-size:clamp(21px,2.8vw,28px);margin:48px 0 10px;letter-spacing:-.2px}
+h3{font-size:18px;margin:24px 0 6px}
+p.lead{font-size:clamp(16px,2vw,19px);color:var(--muted);margin:0 0 8px}
+section.step{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:22px 22px 18px;margin-top:18px;box-shadow:var(--shadow)}
+section.step .num{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:14px;margin-right:10px;vertical-align:middle}
+section.step h2{margin:0;display:inline;font-size:clamp(18px,2.4vw,22px);vertical-align:middle}
+section.step p{margin:10px 0 0}
+section.step ul{margin:10px 0 0;padding-left:20px}
+section.step li{margin:4px 0}
+.where{margin-top:12px;font-size:14px;color:var(--muted)}
+.where code{background:var(--code-bg);padding:1px 6px;border-radius:6px}
+code{background:var(--code-bg);padding:1px 6px;border-radius:6px;font-size:.92em}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:20px 0 8px;font-size:14px}
+.flow span{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+.flow i{font-style:normal;color:var(--muted)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface);margin-top:12px}
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:460px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line)}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.callout{border-left:3px solid var(--warn);background:var(--surface);border-radius:10px;padding:14px 16px;margin-top:18px;color:var(--muted);font-size:15px}
+.callout strong{color:var(--ink)}
+.back{display:inline-block;margin-top:24px;color:var(--accent);text-decoration:none;font-weight:600}
+footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
+@media (max-width:560px){ nav a{margin-left:10px;font-size:13px} }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html">svdquant</a>
+    <nav>
+      <a href="index.html">Overview</a>
+      <a href="#steps">Steps</a>
+      <a href="#runtime">Runtime</a>
+      <button class="toggle" id="themeToggle" type="button" aria-label="Toggle light and dark theme">Theme</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Pipeline deep-dive</div>
+  <h1>From a dense model to a 4 to 6 bit file</h1>
+  <p class="lead">
+    svdquant works in two halves. Compression measures the model once and chooses a precision for
+    every layer. Runtime then reads the packed factors directly, so the full weight matrix is never
+    rebuilt when a token is decoded.
+  </p>
+  <div class="flow" aria-label="Pipeline stages">
+    <span>Calibrate</span><i>→</i><span>Sweep candidates</span><i>→</i><span>Allocate bits</span><i>→</i><span>Factor and quantize</span><i>→</i><span>Store</span><i>→</i><span>Decode</span>
+  </div>
+</header>
+
+<div id="steps">
+
+<section class="step">
+  <span class="num">1</span><h2>Calibration: measure what matters</h2>
+  <p>
+    The model runs over a small calibration text once. For each linear layer, the pass records the
+    uncentered activation second moment <code>C = (1/N) X Xᵀ</code>. This matrix says which input
+    directions the layer actually uses, so errors in those directions count more.
+  </p>
+  <p>The same <code>C</code> drives three later decisions: the scale search, the error metric, and the bit allocation. No extra pass is needed. Large matrices are whitened with a Cholesky factor when an eigendecomposition would be too slow.</p>
+  <div class="where">Where: <code>svdquant/hf/calibration_cache.py</code>, <code>svdquant/svd/</code></div>
+</section>
+
+<section class="step">
+  <span class="num">2</span><h2>Candidate sweep: try many ways to store each layer</h2>
+  <p>
+    Each layer is tried under a grid of options: factor rank, bit width (4, 6 or 8), group size
+    (16 to 256), and asymmetric or symmetric codes. Every candidate is scored by its real stored size,
+    counting codes, scales, zero points, padding and layer headers, and by its measured error.
+    Candidates that are strictly worse on both size and error are dropped, which is exact because
+    they can never be chosen.
+  </p>
+  <ul>
+    <li><strong>Coarse-to-fine rank search:</strong> a coarse ladder first, then a full search near the best rank.</li>
+    <li><strong>Search modes:</strong> <code>fast</code>, <code>balanced</code> (default), and <code>thorough</code>.</li>
+  </ul>
+  <div class="where">Where: <code>svdquant/allocator/candidates.py</code>, <code>svdquant/allocator/sweep.py</code></div>
+</section>
+
+<section class="step">
+  <span class="num">3</span><h2>Allocation: spend the bit budget where it helps</h2>
+  <p>
+    Layers are not compared by their relative error. They are compared by the absolute error energy
+    <code>tr(ΔW C ΔWᵀ)</code>, which is the damage a layer does to the network's output. A global
+    budget then assigns each layer a candidate so that total damage falls fastest per byte. Sensitive
+    layers keep their precision, and tolerant layers give some up.
+  </p>
+  <p>
+    Some layers are protected: their caps are relaxed and they stay at 8 bits when the budget allows.
+    That protection is why the best measured point (5.77 bits per weight) reaches 13.3 perplexity.
+  </p>
+  <div class="where">Where: <code>svdquant/allocator/budget.py</code></div>
+</section>
+
+<section class="step">
+  <span class="num">4</span><h2>Factorization and error compensation</h2>
+  <p>
+    Each weight matrix is split into two low-rank factors, <code>A</code> and <code>B</code>,
+    using a truncated SVD (or a randomized range finder with a seeded projection, so builds are
+    reproducible). Each factor is quantized on its own, and the rank is validated by its residual.
+  </p>
+  <p>
+    For int4 layers, GPTQ-style error compensation updates the remaining columns after each
+    rounding step, using a Cholesky factor of the inverse Hessian built from <code>C</code>. The
+    update divides by the Cholesky diagonal, which is the square root of each pivot, not 1. A safety
+    net compares the result against the plain searched quantizer and keeps the plain result unless
+    compensation wins by at least 2%.
+  </p>
+  <div class="where">Where: <code>svdquant/svd/decompose.py</code>, <code>svdquant/quantizers/optimized.py</code></div>
+</section>
+
+<section class="step">
+  <span class="num">5</span><h2>Scale search: clipping instead of min and max</h2>
+  <p>
+    Each group's scale and zero point are searched over clipping ratios, weighted by the importance
+    from <code>C</code>. A few local refinement passes polish the result, with no host synchronization.
+    The plain min and max rounding option was removed from the pipeline: it saved little VRAM and
+    cost a large jump in perplexity.
+  </p>
+  <div class="where">Where: <code>svdquant/quantizers/optimized.py</code></div>
+</section>
+
+<section class="step">
+  <span class="num">6</span><h2>Storage: smaller on disk, still fast to load</h2>
+  <p>
+    Quantized codes are canonical-Huffman coded per tensor, and only when that saves bytes. On Qwen2.5-0.5B this saves 38.5 MiB across 246 tensors with no quality change. Scales are stored as 8-bit log-domain codes, so metadata is 0.72% of the file. The embedding table is stored as packed 8-bit codes with one scale per row, and the tied LM head shares that storage.
+  </p>
+  <p>
+    The file is checked by the SHA-256 of its weights. <code>svdquant verify</code> compares the predicted size with the real serialized size, and the container overhead measured for Qwen2.5-0.5B was 0.09%.
+  </p>
+  <div class="where">Where: <code>svdquant/entropy.py</code>, <code>svdquant/native/entropy_codec.cpp</code>, <code>svdquant/hf/entropy_io.py</code>, <code>svdquant/nn/quantized_table.py</code></div>
+</section>
+
+</div>
+
+<h2 id="runtime">Runtime: how a token is produced</h2>
+<p class="lead">Decoding and prompt processing want different things, so they use different kernels.</p>
+
+<section class="step">
+  <span class="num">7</span><h2>Decode: fused dequantize and multiply</h2>
+  <p>
+    For one token, the Triton kernel reads the packed factors and dequantizes them inside the matrix
+    multiply. The full weight is never written out, so VRAM stays low. Computing <code>Y = A (B X)</code>
+    on the factors keeps the arithmetic small.
+  </p>
+  <div class="where">Where: <code>svdquant/kernels/triton_kernels.py</code>, <code>svdquant/nn/quantized_linear.py</code></div>
+</section>
+
+<section class="step">
+  <span class="num">8</span><h2>Prefill: dequantize once, then cuBLAS</h2>
+  <p>
+    The fused kernel repeats dequantization for every block of tokens, which is far too slow on long
+    prompts. Above 96 activation rows the weight is dequantized once and passed to cuBLAS. On a
+    2,048-token forward this cut the time from 5,545 ms to 237 ms.
+  </p>
+  <div class="where">Where: <code>svdquant/kernels/dispatch.py</code></div>
+</section>
+
+<section class="step">
+  <span class="num">9</span><h2>CUDA-graph decode</h2>
+  <p>
+    The single-token step is captured once and replayed. A 0.5B decode step becomes one launch
+    instead of about 340. Output is token-for-token identical to eager decoding. Sampling and CPU
+    models take the normal path.
+  </p>
+  <div class="where">Where: <code>svdquant/graph_decode.py</code></div>
+</section>
+
+<section class="step">
+  <span class="num">10</span><h2>Quantized KV cache (optional)</h2>
+  <p>
+    Attention states can be stored as fp8-e4m3 codes, or int8 where fp8 is not available, with one
+    fp16 scale per token vector. That roughly halves KV storage. It is turned on per run.
+  </p>
+  <div class="where">Where: <code>svdquant/kv_cache.py</code></div>
+</section>
+
+<div class="callout">
+  <strong>What this page does not claim.</strong> Compression is slower than the earlier baseline,
+  mostly in the sweep. Older RTX cards are not yet tested. Sub-4-bit quality is still a goal. See
+  the <a href="index.html#roadmap">roadmap</a> for the open items.
+</div>
+
+<a class="back" href="index.html">← Back to the overview</a>
+
+</main>
+
+<footer>
+  <div class="wrap" style="padding:0">
+    <p>svdquant by Abdullah Al-duhaim. Developed with assistance from GLM, MiniMax and DeepSeek.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeToggle');
+  var saved=null; try{ saved=localStorage.getItem('svdq-theme'); }catch(e){}
+  if(saved){ root.setAttribute('data-theme',saved); }
+  function current(){
+    var explicit=root.getAttribute('data-theme');
+    if(explicit) return explicit;
+    return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+  }
+  btn.addEventListener('click',function(){
+    var next=current()==='dark'?'light':'dark';
+    root.setAttribute('data-theme',next);
+    try{ localStorage.setItem('svdq-theme',next); }catch(e){}
+  });
+})();
+</script>
+</body>
+</html>
