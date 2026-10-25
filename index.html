@@ -160,9 +160,13 @@ footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
     </table>
   </div>
 
+  <div class="callout">
+    <strong>VRAM measurement note.</strong> The 255 MiB figures are the compressed model's peak resident VRAM during the benchmarked prefill/decode path. The 344 MiB roadmap figure is a separate embedding-and-tied-head measurement with that table resident in the runtime. They use different configurations, so they are not contradictory.
+  </div>
+
   <h3>The quality–size frontier (Qwen2.5-0.5B)</h3>
-  <p class="lead" style="margin-bottom:0">Measured points on the same evaluation split. Horizontal axis is whole-model bits per weight; vertical axis is perplexity.</p>
-  <div class="chart" role="img" aria-label="Scatter plot of perplexity against bits per weight for measured svdquant configurations">
+  <p class="lead" style="margin-bottom:0">Measured Qwen2.5-0.5B points from the same WikiText-2 evaluation split. Labels show the exact bits-per-weight and perplexity values used to place each point; lower perplexity is better. The BF16 reference is not plotted here.</p>
+  <div class="chart" role="img" aria-label="Scatter plot of measured Qwen2.5-0.5B WikiText-2 perplexity against whole-model bits per weight">
     <svg viewBox="0 0 640 340" xmlns="http://www.w3.org/2000/svg">
       <!-- axes -->
       <line x1="60" y1="290" x2="620" y2="290" stroke="var(--line)" stroke-width="1.5"/>
@@ -188,27 +192,27 @@ footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
         <text x="340" y="330" text-anchor="middle">bits per weight (whole model)</text>
         <text x="16" y="160" transform="rotate(-90 16 160)" text-anchor="middle">perplexity</text>
       </g>
-      <!-- points: x = 100 + (bpw-4)*220 ; y = 270 - (ppl-12)*54.6 approx (2 PPL = 109px) -->
+      <!-- Coordinates use x = 100 + (bpw - 4)*220 and y = 270 - (ppl - 12)*27.25. -->
       <!-- uniform int4 plain search, emb int4: 4.144, 16.572 -->
-      <circle cx="191" cy="90" r="6" fill="var(--warn)"/>
-      <text x="203" y="78" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">4.14 bpw · 16.57 plain search</text>
+      <circle cx="132" cy="145" r="6" fill="var(--warn)"/>
+      <text x="144" y="137" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">4.14 bpw · 16.57 plain search</text>
       <!-- same with GPTQ: 4.144, 15.568 -->
-      <circle cx="191" cy="145" r="6" fill="var(--accent)"/>
-      <text x="203" y="158" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">4.14 bpw · 15.57 with GPTQ</text>
+      <circle cx="132" cy="173" r="6" fill="var(--accent)"/>
+      <text x="144" y="181" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">4.14 bpw · 15.57 with GPTQ</text>
       <!-- embedding int4 g128 at 4.52: 14.485 -->
-      <circle cx="260" cy="190" r="6" fill="var(--accent)"/>
-      <text x="272" y="180" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">4.52 · 14.49</text>
+      <circle cx="214" cy="202" r="6" fill="var(--accent)"/>
+      <text x="226" y="196" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">4.52 · 14.49</text>
       <!-- uniform int4 + emb int8 at 5.20: 15.416 -->
-      <circle cx="368" cy="150" r="6" fill="var(--muted)"/>
-      <text x="380" y="130" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">5.20 · 15.42</text>
+      <circle cx="364" cy="178" r="6" fill="var(--muted)"/>
+      <text x="376" y="170" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">5.20 · 15.42</text>
       <!-- reference 5.58: 13.572 -->
-      <circle cx="418" cy="231" r="6" fill="var(--accent)"/>
-      <line x1="418" y1="231" x2="410" y2="214" stroke="var(--accent)" stroke-width="1.5"/>
-      <text x="402" y="210" text-anchor="end" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">5.58 · 13.57</text>
+      <circle cx="448" cy="227" r="6" fill="var(--accent)"/>
+      <line x1="448" y1="227" x2="438" y2="211" stroke="var(--accent)" stroke-width="1.5"/>
+      <text x="430" y="207" text-anchor="end" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">5.58 · 13.57</text>
       <!-- best 5.77: 13.317 -->
-      <circle cx="458" cy="245" r="6" fill="var(--good)"/>
-      <line x1="458" y1="245" x2="470" y2="264" stroke="var(--good)" stroke-width="1.5"/>
-      <text x="478" y="278" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">5.77 · 13.32 (best)</text>
+      <circle cx="489" cy="234" r="6" fill="var(--good)"/>
+      <line x1="489" y1="234" x2="500" y2="252" stroke="var(--good)" stroke-width="1.5"/>
+      <text x="508" y="266" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">5.77 · 13.32 (best)</text>
     </svg>
   </div>
 

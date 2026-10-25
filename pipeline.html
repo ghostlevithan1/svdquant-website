@@ -99,43 +99,36 @@ footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
 <section class="step">
   <span class="num">1</span><h2>Calibration: measure what matters</h2>
   <p>
-    The model runs over a small calibration text once. For each linear layer, the pass records the
-    uncentered activation second moment <code>C = (1/N) X Xᵀ</code>. This matrix says which input
-    directions the layer actually uses, so errors in those directions count more.
+    The model runs over a small calibration text once. For each linear layer, the pass records
+    activation statistics that show which input directions the layer actually uses, so errors in
+    important directions count more.
   </p>
-  <p>The same <code>C</code> drives three later decisions: the scale search, the error metric, and the bit allocation. No extra pass is needed. Large matrices are whitened with a Cholesky factor when an eigendecomposition would be too slow.</p>
-  <div class="where">Where: <code>svdquant/hf/calibration_cache.py</code>, <code>svdquant/svd/</code></div>
+  <p>The same calibration pass informs the scale search, error metric and bit allocation, avoiding repeated measurement work.</p>
 </section>
 
 <section class="step">
   <span class="num">2</span><h2>Candidate sweep: try many ways to store each layer</h2>
   <p>
-    Each layer is tried under a grid of options: factor rank, bit width (4, 6 or 8), group size
-    (16 to 256), and asymmetric or symmetric codes. Every candidate is scored by its real stored size,
-    counting codes, scales, zero points, padding and layer headers, and by its measured error.
-    Candidates that are strictly worse on both size and error are dropped, which is exact because
-    they can never be chosen.
+    Each layer is tried under a range of factor ranks, bit widths and storage options. Every
+    candidate is scored by its real stored size and measured error. Candidates that are worse on
+    both size and error are dropped because they can never be chosen.
   </p>
   <ul>
-    <li><strong>Coarse-to-fine rank search:</strong> a coarse ladder first, then a full search near the best rank.</li>
-    <li><strong>Search modes:</strong> <code>fast</code>, <code>balanced</code> (default), and <code>thorough</code>.</li>
+    <li><strong>Coarse-to-fine search:</strong> broad candidates are narrowed before the final comparison.</li>
   </ul>
-  <div class="where">Where: <code>svdquant/allocator/candidates.py</code>, <code>svdquant/allocator/sweep.py</code></div>
 </section>
 
 <section class="step">
   <span class="num">3</span><h2>Allocation: spend the bit budget where it helps</h2>
   <p>
-    Layers are not compared by their relative error. They are compared by the absolute error energy
-    <code>tr(ΔW C ΔWᵀ)</code>, which is the damage a layer does to the network's output. A global
-    budget then assigns each layer a candidate so that total damage falls fastest per byte. Sensitive
+    Layers are compared by how much their quantization error changes the network's output. A global
+    budget then assigns each layer a candidate so that quality improves fastest per byte. Sensitive
     layers keep their precision, and tolerant layers give some up.
   </p>
   <p>
     Some layers are protected: their caps are relaxed and they stay at 8 bits when the budget allows.
     That protection is why the best measured point (5.77 bits per weight) reaches 13.3 perplexity.
   </p>
-  <div class="where">Where: <code>svdquant/allocator/budget.py</code></div>
 </section>
 
 <section class="step">
@@ -146,35 +139,31 @@ footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
     reproducible). Each factor is quantized on its own, and the rank is validated by its residual.
   </p>
   <p>
-    For int4 layers, GPTQ-style error compensation updates the remaining columns after each
-    rounding step, using a Cholesky factor of the inverse Hessian built from <code>C</code>. The
-    update divides by the Cholesky diagonal, which is the square root of each pivot, not 1. A safety
-    net compares the result against the plain searched quantizer and keeps the plain result unless
-    compensation wins by at least 2%.
+    For int4 layers, an error-compensation pass updates the remaining values after rounding. A
+    safety check compares the compensated result with the plain searched quantizer and keeps the
+    better result.
   </p>
-  <div class="where">Where: <code>svdquant/svd/decompose.py</code>, <code>svdquant/quantizers/optimized.py</code></div>
 </section>
 
 <section class="step">
   <span class="num">5</span><h2>Scale search: clipping instead of min and max</h2>
   <p>
-    Each group's scale and zero point are searched over clipping ratios, weighted by the importance
-    from <code>C</code>. A few local refinement passes polish the result, with no host synchronization.
-    The plain min and max rounding option was removed from the pipeline: it saved little VRAM and
-    cost a large jump in perplexity.
+    Each group's scale and zero point are searched over clipping candidates, weighted by the
+    importance measured during calibration. Local refinement then polishes the best result. This
+    avoids relying on a single min/max range that can hurt quality.
   </p>
-  <div class="where">Where: <code>svdquant/quantizers/optimized.py</code></div>
 </section>
 
 <section class="step">
   <span class="num">6</span><h2>Storage: smaller on disk, still fast to load</h2>
   <p>
-    Quantized codes are canonical-Huffman coded per tensor, and only when that saves bytes. On Qwen2.5-0.5B this saves 38.5 MiB across 246 tensors with no quality change. Scales are stored as 8-bit log-domain codes, so metadata is 0.72% of the file. The embedding table is stored as packed 8-bit codes with one scale per row, and the tied LM head shares that storage.
+    Quantized codes use compact entropy coding when it saves space without changing quality. The
+    embedding table is stored in a packed form, and the tied LM head shares that storage.
   </p>
   <p>
-    The file is checked by the SHA-256 of its weights. <code>svdquant verify</code> compares the predicted size with the real serialized size, and the container overhead measured for Qwen2.5-0.5B was 0.09%.
+    The serialized output includes integrity checks and a verification step that compares predicted
+    size with the actual file.
   </p>
-  <div class="where">Where: <code>svdquant/entropy.py</code>, <code>svdquant/native/entropy_codec.cpp</code>, <code>svdquant/hf/entropy_io.py</code>, <code>svdquant/nn/quantized_table.py</code></div>
 </section>
 
 </div>
@@ -185,31 +174,27 @@ footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
 <section class="step">
   <span class="num">7</span><h2>Decode: fused dequantize and multiply</h2>
   <p>
-    For one token, the Triton kernel reads the packed factors and dequantizes them inside the matrix
+    For one token, the runtime reads the packed factors and dequantizes them inside the matrix
     multiply. The full weight is never written out, so VRAM stays low. Computing <code>Y = A (B X)</code>
     on the factors keeps the arithmetic small.
   </p>
-  <div class="where">Where: <code>svdquant/kernels/triton_kernels.py</code>, <code>svdquant/nn/quantized_linear.py</code></div>
 </section>
 
 <section class="step">
-  <span class="num">8</span><h2>Prefill: dequantize once, then cuBLAS</h2>
+  <span class="num">8</span><h2>Prefill: dequantize once, then use a dense matrix multiply</h2>
   <p>
-    The fused kernel repeats dequantization for every block of tokens, which is far too slow on long
-    prompts. Above 96 activation rows the weight is dequantized once and passed to cuBLAS. On a
+    Repeating dequantization for every block of tokens is too slow on long prompts. Above 96
+    activation rows the weight is dequantized once and passed to a dense matrix multiply. On a
     2,048-token forward this cut the time from 5,545 ms to 237 ms.
   </p>
-  <div class="where">Where: <code>svdquant/kernels/dispatch.py</code></div>
 </section>
 
 <section class="step">
   <span class="num">9</span><h2>CUDA-graph decode</h2>
   <p>
-    The single-token step is captured once and replayed. A 0.5B decode step becomes one launch
-    instead of about 340. Output is token-for-token identical to eager decoding. Sampling and CPU
-    models take the normal path.
+    The single-token step is captured once and replayed to reduce launch overhead. Output is
+    token-for-token identical to eager decoding. Sampling and CPU models take the normal path.
   </p>
-  <div class="where">Where: <code>svdquant/graph_decode.py</code></div>
 </section>
 
 <section class="step">
@@ -218,7 +203,6 @@ footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
     Attention states can be stored as fp8-e4m3 codes, or int8 where fp8 is not available, with one
     fp16 scale per token vector. That roughly halves KV storage. It is turned on per run.
   </p>
-  <div class="where">Where: <code>svdquant/kv_cache.py</code></div>
 </section>
 
 <div class="callout">
