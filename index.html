@@ -189,9 +189,9 @@ footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
         <text x="16" y="160" transform="rotate(-90 16 160)" text-anchor="middle">perplexity</text>
       </g>
       <!-- points: x = 100 + (bpw-4)*220 ; y = 270 - (ppl-12)*54.6 approx (2 PPL = 109px) -->
-      <!-- bf16 baseline 12.735 -> y = 270 - 0.735*54.6 = 230 ; drawn as reference -->
-      <line x1="60" y1="230" x2="620" y2="230" stroke="var(--good)" stroke-dasharray="6 4" stroke-width="1.5"/>
-      <text x="604" y="224" text-anchor="end" style="fill:var(--good)">bf16 12.74</text>
+      <!-- bf16 baseline 12.735 -> y ≈ 250 using the chart's 27px-per-PPL scale -->
+      <line x1="60" y1="250" x2="620" y2="250" stroke="var(--good)" stroke-dasharray="6 4" stroke-width="1.5"/>
+      <text x="604" y="244" text-anchor="end" style="fill:var(--good);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">bf16 12.74</text>
       <!-- uniform int4 plain search, emb int4: 4.144, 16.572 -->
       <circle cx="191" cy="90" r="6" fill="var(--warn)"/>
       <text x="203" y="78" style="fill:var(--ink);paint-order:stroke;stroke:var(--surface);stroke-width:5px;stroke-linejoin:round">4.14 bpw · 16.57 plain search</text>
